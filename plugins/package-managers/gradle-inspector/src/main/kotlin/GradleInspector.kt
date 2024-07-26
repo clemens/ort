@@ -373,6 +373,12 @@ private fun GradleInspector.createRemoteArtifact(
     extension: String? = null
 ): RemoteArtifact {
     val algorithm = "sha1"
+
+    // Hack :-)
+    if (!System.getenv("JAVA_IGNORE_ARTIFACTS").isNullOrEmpty()) {
+        return RemoteArtifact.EMPTY
+    }
+
     val artifactBaseUrl = pomUrl?.removeSuffix(".pom") ?: return RemoteArtifact.EMPTY
 
     val artifactUrl = buildString {
