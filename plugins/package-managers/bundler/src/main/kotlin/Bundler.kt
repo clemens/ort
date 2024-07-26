@@ -372,7 +372,7 @@ class Bundler(
             GemInfo.createFromGem(details)
         }.onFailure {
             val error = (it as? HttpDownloadError) ?: run {
-                logger.warn { "Unable to retrieve metadata for gem '$name' from RubyGems: ${it.message}" }
+                logger.warn { "Unable to retrieve metadata for gem '$name:$version' from RubyGems: ${it.message}" }
                 return null
             }
 
