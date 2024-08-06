@@ -320,7 +320,8 @@ private fun GradleInspector.createRemoteArtifact(
 ): RemoteArtifact {
     val algorithm = "sha1"
 
-    // Hack :-)
+    // We allow to ignore source artifacts by setting the ENV variable, so we can avoid running into duplicate package
+    // issues. See https://github.com/oss-review-toolkit/ort/issues/8127.
     if (!System.getenv("JAVA_IGNORE_ARTIFACTS").isNullOrEmpty()) {
         return RemoteArtifact.EMPTY
     }
