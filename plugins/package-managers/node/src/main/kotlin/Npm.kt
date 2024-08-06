@@ -347,6 +347,16 @@ open class Npm(
             vcsFromPackage = vcsFromPackage.merge(vcsFromDownloadUrl)
         }
 
+        // We allow to ignore source artifacts by setting the ENV variable, so we can avoid running into duplicate
+        // package issues. See https://github.com/oss-review-toolkit/ort/issues/8127.
+        var sourceArtifact = RemoteArtifact.EMPTY
+        if (System.getenv("JAVASCRIPT_IGNORE_ARTIFACTS").isNullOrEmpty()) {
+            sourceArtifact = RemoteArtifact(
+                url = VcsHost.toArchiveDownloadUrl(vcsFromDownloadUrl) ?: downloadUrl,
+                hash = hash
+            )
+        }
+
         val module = Package(
             id = id,
             authors = authors,
@@ -354,10 +364,7 @@ open class Npm(
             description = description,
             homepageUrl = homepageUrl,
             binaryArtifact = RemoteArtifact.EMPTY,
-            sourceArtifact = RemoteArtifact(
-                url = VcsHost.toArchiveDownloadUrl(vcsFromDownloadUrl) ?: downloadUrl,
-                hash = hash
-            ),
+            sourceArtifact = sourceArtifact,
             vcs = vcsFromPackage,
             vcsProcessed = processPackageVcs(vcsFromPackage, homepageUrl)
         )
