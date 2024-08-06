@@ -404,15 +404,15 @@ COPY --from=dotnetbuild /opt/dotnet /opt/dotnet
 # BAZEL
 FROM base as bazelbuild
 
-ARG BAZEL_VERSION
+ARG BAZELISK_VERSION
 
 ENV BAZEL_HOME=/opt/bazel
 
 RUN mkdir -p $BAZEL_HOME/bin \
     && if [ "$(arch)" = "aarch64" ]; then \
-    curl -L https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-linux-arm64 -o $BAZEL_HOME/bin/bazel; \
+    curl -L https://github.com/bazelbuild/bazelisk/releases/download/v$BAZELISK_VERSION/bazelisk-linux-arm64 -o $BAZEL_HOME/bin/bazel; \
     else \
-    curl -L https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-linux-x86_64 -o $BAZEL_HOME/bin/bazel; \
+    curl -L https://github.com/bazelbuild/bazelisk/releases/download/v$BAZELISK_VERSION/bazelisk-linux-amd64 -o $BAZEL_HOME/bin/bazel; \
     fi \
     && chmod a+x $BAZEL_HOME/bin/bazel
 
@@ -549,9 +549,11 @@ ARG COMPOSER_VERSION
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    sudo apt-get update && \
-    DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
-    php${PHP_VERSION} \
+    sudo apt-get update \
+    && sudo apt-get install -y software-properties-common \
+    && sudo add-apt-repository ppa:ondrej/php \
+    && sudo apt-get update \
+    && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends php${PHP_VERSION} \
     && sudo rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/php/bin \

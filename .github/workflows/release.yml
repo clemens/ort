@@ -30,7 +30,7 @@ jobs:
           ref: ${{ env.ORT_VERSION }}
           fetch-depth: 0
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
+        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4
         with:
           gradle-home-cache-cleanup: true
       - name: Publish to OSSRH
@@ -56,7 +56,7 @@ jobs:
               ./cli/build/distributions/ort-$ORT_VERSION.{tgz,zip}* \
               ./helper-cli/build/distributions/orth-$ORT_VERSION.{tgz,zip}*
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@5e9cb68e95676991667494a6a4e59b8a2f13e1d0 # v1
+        uses: actions/attest-build-provenance@210c1913531870065f03ce1f9440dd87bc0938cd # v1
         with:
           subject-path: |
             ./cli/build/distributions/ort-${{ env.ORT_VERSION }}.tgz
