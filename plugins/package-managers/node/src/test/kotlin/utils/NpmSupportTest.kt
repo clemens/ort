@@ -26,6 +26,9 @@ import io.kotest.matchers.shouldBe
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.readJsonTree
+import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
+import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson.Author
+import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson.Repository
 
 class NpmSupportTest : WordSpec({
     "expandNpmShortcutUrl()" should {
@@ -79,38 +82,28 @@ class NpmSupportTest : WordSpec({
 
     "fixNpmDownloadUrl()" should {
         "replace HTTP with HTTPS for the NPM registry only" {
-            fixNpmDownloadUrl("http://registry.npmjs.org/babel-cli/-/babel-cli-6.26.0.tgz") shouldBe
+            "http://registry.npmjs.org/babel-cli/-/babel-cli-6.26.0.tgz".fixNpmDownloadUrl() shouldBe
                 "https://registry.npmjs.org/babel-cli/-/babel-cli-6.26.0.tgz"
-            fixNpmDownloadUrl("http://oss-review-toolkit.org/") shouldBe "http://oss-review-toolkit.org/"
+            "http://oss-review-toolkit.org/".fixNpmDownloadUrl() shouldBe "http://oss-review-toolkit.org/"
         }
 
         "correct Artifactory API URLS" {
-            fixNpmDownloadUrl("http://my.repo/artifactory/api/npm/npm/all") shouldBe
+            "http://my.repo/artifactory/api/npm/npm/all".fixNpmDownloadUrl() shouldBe
                 "http://my.repo/artifactory/npm/all"
         }
     }
 
-    "parseNpmAuthors()" should {
+    "parseNpmAuthor()" should {
         "get authors from a text node" {
-            val node = """
-            {
-              "author": "Jane Doe <jane.doe@example.com>"
-            }
-            """.readJsonTree()
+            val author = Author(name = "Jane Doe <jane.doe@example.com>")
 
-            parseNpmAuthors(node) shouldBe setOf("Jane Doe")
+            parseNpmAuthor(author) shouldBe setOf("Jane Doe")
         }
 
         "get authors from an object node" {
-            val node = """
-            {
-              "author": {
-                "name": "John Doe"
-              }
-            }
-            """.readJsonTree()
+            val author = Author(name = "John Doe")
 
-            parseNpmAuthors(node) shouldBe setOf("John Doe")
+            parseNpmAuthor(author) shouldBe setOf("John Doe")
         }
     }
 
@@ -185,19 +178,17 @@ class NpmSupportTest : WordSpec({
     }
 
     "parseNpmVcsInfo()" should {
-        "get VCS information from an object node containing a repository node which is an object" {
-            val node = """
-            {
-              "gitHead": "bar",
-              "repository": {
-                "type": "Git",
-                "url": "https://example.com/",
-                "directory": "foo"
-              }
-            }
-            """.readJsonTree()
+        "get VCS information from a repository instance with type, url and directory" {
+            val packageJson = PackageJson(
+                gitHead = "bar",
+                repository = Repository(
+                    type = "Git",
+                    url = "https://example.com/",
+                    directory = "foo"
+                )
+            )
 
-            parseNpmVcsInfo(node) shouldBe VcsInfo(
+            parseNpmVcsInfo(packageJson) shouldBe VcsInfo(
                 VcsType.GIT,
                 "https://example.com/",
                 "bar",
@@ -205,15 +196,15 @@ class NpmSupportTest : WordSpec({
             )
         }
 
-        "get VCS information from an object node containing a repository node which is textual" {
-            val node = """
-            {
-              "gitHead": "bar",
-              "repository": "git+ssh://example.com/a/b.git"
-            }
-            """.readJsonTree()
+        "get VCS information from a repository object instance with just an url." {
+            val packageJson = PackageJson(
+                gitHead = "bar",
+                repository = Repository(
+                    url = "git+ssh://example.com/a/b.git"
+                )
+            )
 
-            parseNpmVcsInfo(node) shouldBe VcsInfo(
+            parseNpmVcsInfo(packageJson) shouldBe VcsInfo(
                 VcsType.UNKNOWN,
                 "git+ssh://example.com/a/b.git",
                 "bar"

@@ -4,30 +4,24 @@
 
 [![Slack][1]][2]
 
-[![Wrapper Validation][3]][4] [![Static Analysis][5]][6]
+[![Static Analysis][3]][4] [![Build and Test][5]][6] [![Code coverage][7]][8]
 
-[![Build and Test][7]][8] [![JitPack build status][9]][10] [![Code coverage][11]][12]
-
-[![REUSE status][13]][14] [![OpenSSF Scorecard][15]][16] [![OpenSSF Best Practices][17]][18]
+[![REUSE status][9]][10] [![OpenSSF Best Practices][11]][12] [![OpenSSF Scorecard][13]][14]
 
 [1]: https://img.shields.io/badge/Join_us_on_Slack!-ort--talk-blue.svg?longCache=true&logo=slack
 [2]: http://slack.oss-review-toolkit.org
-[3]: https://github.com/oss-review-toolkit/ort/actions/workflows/wrapper-validation.yml/badge.svg
-[4]: https://github.com/oss-review-toolkit/ort/actions/workflows/wrapper-validation.yml
-[5]: https://github.com/oss-review-toolkit/ort/actions/workflows/static-analysis.yml/badge.svg
-[6]: https://github.com/oss-review-toolkit/ort/actions/workflows/static-analysis.yml
-[7]: https://github.com/oss-review-toolkit/ort/actions/workflows/build-and-test.yml/badge.svg
-[8]: https://github.com/oss-review-toolkit/ort/actions/workflows/build-and-test.yml
-[9]: https://jitpack.io/v/oss-review-toolkit/ort.svg
-[10]: https://jitpack.io/#oss-review-toolkit/ort
-[11]: https://codecov.io/gh/oss-review-toolkit/ort/branch/main/graph/badge.svg?token=QD2tCSUTVN
-[12]: https://app.codecov.io/gh/oss-review-toolkit/ort
-[13]: https://api.reuse.software/badge/github.com/oss-review-toolkit/ort
-[14]: https://api.reuse.software/info/github.com/oss-review-toolkit/ort
-[15]: https://api.scorecard.dev/projects/github.com/oss-review-toolkit/ort/badge
-[16]: https://scorecard.dev/viewer/?uri=github.com/oss-review-toolkit/ort
-[17]: https://www.bestpractices.dev/projects/4618/badge
-[18]: https://www.bestpractices.dev/projects/4618
+[3]: https://github.com/oss-review-toolkit/ort/actions/workflows/static-analysis.yml/badge.svg
+[4]: https://github.com/oss-review-toolkit/ort/actions/workflows/static-analysis.yml
+[5]: https://github.com/oss-review-toolkit/ort/actions/workflows/build-and-test.yml/badge.svg
+[6]: https://github.com/oss-review-toolkit/ort/actions/workflows/build-and-test.yml
+[7]: https://codecov.io/gh/oss-review-toolkit/ort/branch/main/graph/badge.svg?token=QD2tCSUTVN
+[8]: https://app.codecov.io/gh/oss-review-toolkit/ort
+[9]: https://api.reuse.software/badge/github.com/oss-review-toolkit/ort
+[10]: https://api.reuse.software/info/github.com/oss-review-toolkit/ort
+[11]: https://www.bestpractices.dev/projects/4618/badge
+[12]: https://www.bestpractices.dev/projects/4618
+[13]: https://api.scorecard.dev/projects/github.com/oss-review-toolkit/ort/badge
+[14]: https://scorecard.dev/viewer/?uri=github.com/oss-review-toolkit/ort
 
 # Introduction
 
@@ -83,8 +77,7 @@ If a package manager is not list listed there, support for it is integrated dire
 
 ## From binaries
 
-Preliminary binary artifacts for ORT are currently available via [JitPack](https://jitpack.io/#oss-review-toolkit/ort).
-Please note that due to limitations with the JitPack build environment, the reporter is not able to create the Web App report.
+Binary artifacts for releases are published to [Maven Central](https://central.sonatype.com/namespace/org.ossreviewtoolkit).
 
 ## From sources
 
