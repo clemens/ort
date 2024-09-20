@@ -51,7 +51,7 @@ internal fun parsePackageJsons(jsons: String): List<PackageJson> =
         JSON.decodeToSequence<JsonElement>(input).mapTo(mutableListOf()) { parsePackageJson(it) }
     }
 
-private fun parsePackageJson(element: JsonElement): PackageJson {
+internal fun parsePackageJson(element: JsonElement): PackageJson {
     val transformedElement = transformPackageJson(element)
     return JSON.decodeFromJsonElement<PackageJson>(transformedElement)
 }
@@ -105,6 +105,9 @@ data class PackageJson(
     val from: String? = null,
     @SerialName("_integrity")
     val integrity: String? = null,
+    val packageManager: String? = null,
+    val dependencies: Map<String, String> = emptyMap(),
+    val devDependencies: Map<String, String> = emptyMap(),
     /** This property does not belong to package.json but to the JSON returned by 'npm info'. */
     val dist: Distribution? = null
 ) {

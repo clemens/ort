@@ -19,7 +19,9 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.node.yarn2
 
-import com.fasterxml.jackson.module.kotlin.contains
+import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlScalar
+import com.charleskorn.kaml.yamlMap
 
 import java.io.File
 
@@ -46,12 +48,11 @@ import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
+import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.createAndLogIssue
-import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.model.utils.DependencyHandler
-import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJsons
@@ -69,6 +70,26 @@ import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 import org.semver4j.RangesList
 import org.semver4j.RangesListFactory
+
+/**
+ * The name of Yarn 2+ resource file.
+ */
+private const val YARN2_RESOURCE_FILE = ".yarnrc.yml"
+
+/**
+ * The pattern to extract rawName, type and version from a Yarn 2+ locator e.g. @babel/preset-env@npm:7.11.0.
+ */
+private val EXTRACT_FROM_LOCATOR_PATTERN = Regex("(.+)@(\\w+):(.+)")
+
+/**
+ * The amount of package details to query at once with `yarn npm info`.
+ */
+private const val BULK_DETAILS_SIZE = 1000
+
+/**
+ * The name of the manifest file used by Yarn 2+.
+ */
+private const val MANIFEST_FILE = "package.json"
 
 // The various Yarn dependency types supported by this package manager.
 private enum class YarnDependencyType(val type: String) {
@@ -104,50 +125,6 @@ class Yarn2(
          * The name of the option that allows overriding the automatic detection of Corepack.
          */
         const val OPTION_COREPACK_OVERRIDE = "corepackOverride"
-
-        /**
-         * The name of Yarn 2+ resource file.
-         */
-        const val YARN2_RESOURCE_FILE = ".yarnrc.yml"
-
-        /**
-         * The property in `.yarnrc.yml` containing the path to the Yarn2+ executable.
-         */
-        const val YARN_PATH_PROPERTY_NAME = "yarnPath"
-
-        /**
-         * The pattern to extract rawName, type and version from a Yarn 2+ locator e.g. @babel/preset-env@npm:7.11.0.
-         */
-        private val EXTRACT_FROM_LOCATOR_PATTERN = Regex("(.+)@(\\w+):(.+)")
-
-        /**
-         * The amount of package details to query at once with `yarn npm info`.
-         */
-        private const val BULK_DETAILS_SIZE = 1000
-
-        /**
-         * The name of the manifest file used by Yarn 2+.
-         */
-        private const val MANIFEST_FILE = "package.json"
-
-        /**
-         * The name of the property that defines the package manager and its version if Corepack is enabled.
-         */
-        private const val PACKAGE_MANAGER_PROPERTY = "packageManager"
-
-        /**
-         * The name of the default executable. This is used when the [OPTION_COREPACK_OVERRIDE] option is set.
-         */
-        private const val DEFAULT_EXECUTABLE_NAME = "yarn"
-
-        /**
-         * Check whether Corepack is enabled based on the `package.json` file in [workingDir]. If no such file is found
-         * or if it cannot be read, assume that this is not the case.
-         */
-        private fun isCorepackEnabledInManifest(workingDir: File): Boolean =
-            runCatching {
-                PACKAGE_MANAGER_PROPERTY in jsonMapper.readTree(workingDir.resolve(MANIFEST_FILE))
-            }.getOrDefault(false)
     }
 
     class Factory : AbstractPackageManagerFactory<Yarn2>("Yarn2") {
@@ -167,7 +144,7 @@ class Yarn2(
      * This map holds the mapping between the directory and their Yarn 2+ executables. It is only used if Yarn has not
      * been installed via Corepack; then it is accessed under a default name.
      */
-    private val yarn2ExecutablesByPath: MutableMap<File, String> = mutableMapOf()
+    private val yarn2ExecutablesByPath: MutableMap<File, File> = mutableMapOf()
 
     private val disableRegistryCertificateVerification =
         options[OPTION_DISABLE_REGISTRY_CERTIFICATE_VERIFICATION].toBoolean()
@@ -186,43 +163,10 @@ class Yarn2(
 
     override fun command(workingDir: File?): String {
         if (workingDir == null) return ""
+        if (isCorepackEnabled(workingDir)) return "yarn"
 
-        val corepackEnabled = if (OPTION_COREPACK_OVERRIDE in options) {
-            options[OPTION_COREPACK_OVERRIDE].toBoolean()
-        } else {
-            isCorepackEnabledInManifest(workingDir)
-        }
-
-        if (corepackEnabled) return DEFAULT_EXECUTABLE_NAME
-
-        return yarn2ExecutablesByPath.getOrPut(workingDir) {
-            val yarnConfig = yamlMapper.readTree(workingDir.resolve(YARN2_RESOURCE_FILE))
-            val yarnCommand = requireNotNull(yarnConfig[YARN_PATH_PROPERTY_NAME]) {
-                "No Yarn 2+ executable could be found in 'yarnrc.yml'."
-            }
-
-            val yarnExecutable = workingDir.resolve(yarnCommand.textValue())
-
-            // TODO: Yarn2 executable is a `cjs` file. Check if under Windows it needs to be run with `node`.
-
-            // TODO: This is a security risk to blindly run code coming from a repository other than ORT's. ORT
-            //       should download the Yarn2 binary from the official repository and run it.
-            require(yarnExecutable.isFile) {
-                "The Yarn 2+ program '${yarnExecutable.name}' does not exist."
-            }
-
-            if (!yarnExecutable.canExecute()) {
-                logger.warn {
-                    "The Yarn 2+ program '${yarnExecutable.name}' should be executable. Changing its rights."
-                }
-
-                require(yarnExecutable.setExecutable(true)) {
-                    "Cannot set the Yarn 2+ program to be executable."
-                }
-            }
-
-            if (Os.isWindows) "node ${yarnExecutable.absolutePath}" else yarnExecutable.absolutePath
-        }
+        val executablePath = yarn2ExecutablesByPath.getOrPut(workingDir) { getYarnExecutable(workingDir) }.absolutePath
+        return executablePath.takeUnless { Os.isWindows } ?: "node $executablePath"
     }
 
     override fun getVersion(workingDir: File?): String =
@@ -233,6 +177,13 @@ class Yarn2(
         if (workingDir == null) "" else super.getVersion(workingDir)
 
     override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=2.0.0")
+
+    private fun isCorepackEnabled(workingDir: File): Boolean =
+        if (OPTION_COREPACK_OVERRIDE in options) {
+            options[OPTION_COREPACK_OVERRIDE].toBoolean()
+        } else {
+            isCorepackEnabledInManifest(workingDir)
+        }
 
     override fun mapDefinitionFiles(definitionFiles: List<File>) =
         NpmDetection(definitionFiles).filterApplicable(NodePackageManager.YARN2)
@@ -314,7 +265,7 @@ class Yarn2(
         logger.info { "Fetching packages details..." }
 
         val chunks = packagesHeaders.filterValues { it.type != "workspace" }.values.map {
-            "${it.rawName}@${cleanYarn2VersionString(it.version)}"
+            "${it.rawName}@${it.version.cleanVersionString()}"
         }.chunked(BULK_DETAILS_SIZE)
 
         return runBlocking(Dispatchers.IO) {
@@ -423,8 +374,8 @@ class Yarn2(
     }
 
     /**
-     * Construct a Package or a Project by parsing its [json] representation generated by `yarn info`, run for the given
-     * [definitionFile].
+     * Construct a Package or a Project by parsing its [packageInfo] representation generated by `yarn info`, run for
+     * the given [definitionFile].
      * Additional data necessary for constructing the instances is read from [packagesHeaders] which should be the
      * package representations as a triple : rawName/type/locator, mapped by package id. Other additional data is read
      * from [packagesDetails] which should be the package details extracted from `yarn npm view`, mapped by id.
@@ -449,13 +400,12 @@ class Yarn2(
         }
 
         val (namespace, name) = splitNpmNamespaceAndName(header.rawName)
-        val version = packageInfo.children.version
-
         val manifest = packageInfo.children.manifest
         val declaredLicenses = manifest.license.orEmpty().let { setOf(it).mapNpmLicenses() }
         var homepageUrl = manifest.homepage.orEmpty()
 
         val id = if (header.type == "workspace") {
+            val version = packageInfo.children.version
             val projectFile = definitionFile.resolveSibling(header.version).resolve(definitionFile.name)
             val packageJson = parsePackageJson(projectFile)
             val additionalData = processAdditionalPackageInfo(packageJson)
@@ -471,13 +421,13 @@ class Yarn2(
             )
             id
         } else {
-            val versionFromLocator = cleanYarn2VersionString(header.version)
-            val details = packagesDetails["${header.rawName}@$versionFromLocator"]
+            val version = header.version.cleanVersionString()
+            val details = packagesDetails["${header.rawName}@$version"]
 
             if (details == null) {
                 issues += createAndLogIssue(
                     managerName,
-                    "No package details found for '${header.rawName}' at version '$versionFromLocator'.",
+                    "No package details found for '${header.rawName}' at version '$version'.",
                     Severity.ERROR
                 )
                 return emptyMap()
@@ -571,7 +521,8 @@ class Yarn2(
     }
 
     /**
-     * Process the [json] result of `yarn npm info` for a given package and return a populated [AdditionalData].
+     * Process the [packageJson] coming from `yarn npm info` for a given package and return a populated
+     * [AdditionalData].
      */
     private fun processAdditionalPackageInfo(packageJson: PackageJson): AdditionalData {
         val name = checkNotNull(packageJson.name)
@@ -621,7 +572,7 @@ class Yarn2(
             val locatorVersion = locatorMatcher.groupValues[3]
 
             val (locatorNamespace, locatorName) = splitNpmNamespaceAndName(locatorRawName)
-            val version = cleanYarn2VersionString(locatorVersion)
+            val version = locatorVersion.cleanVersionString()
 
             val identifierType = if ("workspace" in locatorType) "Yarn2" else "NPM"
             when {
@@ -644,97 +595,138 @@ class Yarn2(
             }
         }.toList()
 
-    /**
-     * Parse the [definitionFile] (package.json) to find the scope of a dependency. Unfortunately, `yarn info -A -R`
-     * does not deliver this information.
-     * Return the dependencies present in the file mapped to their scope.
-     * See also https://classic.yarnpkg.com/en/docs/dependency-types (documentation for Yarn 1).
-     */
-    private fun listDependenciesByType(definitionFile: File): Map<String, YarnDependencyType> {
-        val json = jsonMapper.readTree(definitionFile)
-        val result = mutableMapOf<String, YarnDependencyType>()
-        YarnDependencyType.entries.forEach { dependencyType ->
-            json[dependencyType.type]?.fieldNames()?.asSequence()?.forEach {
-                result += it to dependencyType
-            }
-        }
+    override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =
+        PackageManagerResult(projectResults, graphBuilder.build(), graphBuilder.packages())
+}
 
-        return result
-    }
+/**
+ * A data class storing information about a specific Yarn 2+ module and its dependencies.
+ */
+private data class YarnModuleInfo(
+    /** The identifier for the represented module. */
+    val id: Identifier,
 
-    /**
-     * Clean the [rawVersion] string contained in a Yarn 2+ locator to have it compatible with NPM/Semver.
-     */
-    private fun cleanYarn2VersionString(rawVersion: String): String {
+    /** Package that represent the current dependency or `null` if the dependency is a project dependency. */
+    val pkg: Package?,
+
+    /** A set with information about the modules this module depends on. */
+    val dependencies: Set<YarnModuleInfo>
+)
+
+/**
+ * A specialized [DependencyHandler] implementation for Yarn 2+.
+ */
+private class Yarn2DependencyHandler : DependencyHandler<YarnModuleInfo> {
+    override fun identifierFor(dependency: YarnModuleInfo): Identifier = dependency.id
+
+    override fun dependenciesFor(dependency: YarnModuleInfo): List<YarnModuleInfo> = dependency.dependencies.toList()
+
+    override fun linkageFor(dependency: YarnModuleInfo): PackageLinkage =
+        if (dependency.pkg == null) PackageLinkage.PROJECT_DYNAMIC else PackageLinkage.DYNAMIC
+
+    override fun createPackage(dependency: YarnModuleInfo, issues: MutableCollection<Issue>): Package? = dependency.pkg
+}
+
+/**
+ * The header of a NPM package, coming from a Yarn 2+ locator raw version string.
+ */
+private data class PackageHeader(
+    val rawName: String,
+    val type: String,
+    val version: String
+)
+
+/**
+ * Class containing additional data returned by `yarn npm info`.
+ */
+private data class AdditionalData(
+    val name: String,
+    val version: String,
+    val description: String,
+    val vcsFromPackage: VcsInfo,
+    val vcsFromDownloadUrl: VcsInfo,
+    val homepage: String = "",
+    val downloadUrl: String = "",
+    val hash: Hash = Hash.NONE,
+    val author: Set<String> = emptySet()
+)
+
+/**
+ * Clean this Yarn2 version string (originating from a Yarn 2+ locator) for compatibility with NPM/Semver.
+ */
+private fun String.cleanVersionString(): String =
+    this
         // 'Patch' locators are complex expressions such as
         // resolve@npm%3A2.0.0-next.3#~builtin<compat/resolve>%3A%3Aversion=2.0.0-next.3&hash=07638b
         // Therefore, the version has to be extracted (here '2.0.0-next.3').
-        var result = rawVersion.substringAfter("version=")
-            .substringBefore("&")
-
+        .substringAfter("version=")
+        .substringBefore("&")
         // Remove the archive URLs that can be present due to private registries.
         // See https://github.com/yarnpkg/berry/issues/2192.
-        result = result.substringBefore("::__archiveUrl")
-
+        .substringBefore("::__archiveUrl")
         // Rewrite some dependencies to make them compatible with Identifier.
         // E.g. typescript@patch:typescript@npm%3A4.0.2#~builtin<compat/typescript>::version=4.0.2&hash=ddd1e8
-        return result.replace(":", "%3A")
+        .replace(":", "%3A")
+
+private fun PackageJson.getScopeDependencies(type: YarnDependencyType) =
+    when (type) {
+        YarnDependencyType.DEPENDENCIES -> dependencies
+        YarnDependencyType.DEV_DEPENDENCIES -> devDependencies
     }
 
-    override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =
-        PackageManagerResult(projectResults, graphBuilder.build(), graphBuilder.packages())
+private fun getYarnExecutable(workingDir: File): File {
+    val yarnrcFile = workingDir.resolve(YARN2_RESOURCE_FILE)
+    val yarnConfig = Yaml.default.parseToYamlNode(yarnrcFile.readText()).yamlMap
+    val yarnPath = yarnConfig.get<YamlScalar>("yarnPath")?.content
 
-    /**
-     * A data class storing information about a specific Yarn 2+ module and its dependencies.
-     */
-    private data class YarnModuleInfo(
-        /** The identifier for the represented module. */
-        val id: Identifier,
+    require(!yarnPath.isNullOrEmpty()) { "No Yarn 2+ executable could be found in '$YARN2_RESOURCE_FILE'." }
 
-        /** Package that represent the current dependency or `null` if the dependency is a project dependency. */
-        val pkg: Package?,
+    val yarnExecutable = workingDir.resolve(yarnPath)
 
-        /** A set with information about the modules this module depends on. */
-        val dependencies: Set<YarnModuleInfo>
-    )
-
-    /**
-     * A specialized [DependencyHandler] implementation for Yarn 2+.
-     */
-    private class Yarn2DependencyHandler : DependencyHandler<YarnModuleInfo> {
-        override fun identifierFor(dependency: YarnModuleInfo): Identifier = dependency.id
-
-        override fun dependenciesFor(dependency: YarnModuleInfo): List<YarnModuleInfo> =
-            dependency.dependencies.toList()
-
-        override fun linkageFor(dependency: YarnModuleInfo): PackageLinkage =
-            if (dependency.pkg == null) PackageLinkage.PROJECT_DYNAMIC else PackageLinkage.DYNAMIC
-
-        override fun createPackage(dependency: YarnModuleInfo, issues: MutableCollection<Issue>): Package? =
-            dependency.pkg
+    // TODO: This is a security risk to blindly run code coming from a repository other than ORT's. ORT
+    //       should download the Yarn2 binary from the official repository and run it.
+    require(yarnExecutable.isFile) {
+        "The Yarn 2+ program '${yarnExecutable.name}' does not exist."
     }
 
-    /**
-     * The header of a NPM package, coming from a Yarn 2+ locator raw version string.
-     */
-    private data class PackageHeader(
-        val rawName: String,
-        val type: String,
-        val version: String
-    )
+    if (!yarnExecutable.canExecute()) {
+        Yarn2.logger.warn {
+            "The Yarn 2+ program '${yarnExecutable.name}' should be executable. Changing its rights."
+        }
 
-    /**
-     * Class containing additional data returned by `yarn npm info`.
-     */
-    private data class AdditionalData(
-        val name: String,
-        val version: String,
-        val description: String,
-        val vcsFromPackage: VcsInfo,
-        val vcsFromDownloadUrl: VcsInfo,
-        val homepage: String = "",
-        val downloadUrl: String = "",
-        val hash: Hash = Hash.NONE,
-        val author: Set<String> = emptySet()
-    )
+        require(yarnExecutable.setExecutable(true)) {
+            "Cannot set the Yarn 2+ program to be executable."
+        }
+    }
+
+    return yarnExecutable
+}
+
+/**
+ * Check whether Corepack is enabled based on the `package.json` file in [workingDir]. If no such file is found
+ * or if it cannot be read, assume that this is not the case.
+ */
+private fun isCorepackEnabledInManifest(workingDir: File): Boolean =
+    runCatching {
+        val packageJson = parsePackageJson(workingDir.resolve(MANIFEST_FILE))
+        !packageJson.packageManager.isNullOrEmpty()
+    }.getOrDefault(false)
+
+/**
+ * Parse the [definitionFile] (package.json) to find the scope of a dependency. Unfortunately, `yarn info -A -R`
+ * does not deliver this information.
+ * Return the dependencies present in the file mapped to their scope.
+ * See also https://classic.yarnpkg.com/en/docs/dependency-types (documentation for Yarn 1).
+ */
+private fun listDependenciesByType(definitionFile: File): Map<String, YarnDependencyType> {
+    val packageJson = parsePackageJson(definitionFile)
+    val result = mutableMapOf<String, YarnDependencyType>()
+
+    YarnDependencyType.entries.forEach { dependencyType ->
+        packageJson.getScopeDependencies(dependencyType).keys.forEach {
+            result += it to dependencyType
+        }
+    }
+
+    return result
 }

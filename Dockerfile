@@ -1,4 +1,4 @@
-# syntax=devthefuture/dockerfile-x:v1.4.1
+# syntax=devthefuture/dockerfile-x:v1.4.2
 # The above opts-in for an extended syntax that supports e.g. "INCLUDE" statements, see
 # https://codeberg.org/devthefuture/dockerfile-x
 
@@ -388,7 +388,7 @@ RUN mkdir -p $DOTNET_HOME \
     fi
 
 RUN mkdir -p $DOTNET_HOME/bin \
-    && curl -L https://github.com/nexB/nuget-inspector/releases/download/v$NUGET_INSPECTOR_VERSION/nuget-inspector-v$NUGET_INSPECTOR_VERSION-linux-x64.tar.gz \
+    && curl -L https://github.com/aboutcode-org/nuget-inspector/releases/download/v$NUGET_INSPECTOR_VERSION/nuget-inspector-v$NUGET_INSPECTOR_VERSION-linux-x64.tar.gz \
     | tar --strip-components=1 -C $DOTNET_HOME/bin -xz
 
 FROM scratch AS dotnet

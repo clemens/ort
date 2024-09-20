@@ -23,12 +23,14 @@ import java.io.File
 
 import kotlin.time.Duration.Companion.days
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
-import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.plugins.packagemanagers.node.utils.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.utils.NpmDetection
 import org.ossreviewtoolkit.utils.common.DiskCache
@@ -85,14 +87,12 @@ class Yarn(
 
         val process = run(workingDir, "info", "--json", packageName)
 
-        return jsonMapper.readTree(process.stdout)["data"]?.let {
+        val data = Json.parseToJsonElement(process.stdout).jsonObject["data"]?.also {
             yarnInfoCache.write(packageName, it.toString())
-            parsePackageJson(it.toString())
-        } ?: run {
-            jsonMapper.readTree(process.stderr)["data"].let {
-                logger.warn { "Error running '${process.commandLine}' in directory $workingDir: $it" }
-                parsePackageJson(it.toString())
-            }
+        } ?: checkNotNull(Json.parseToJsonElement(process.stderr).jsonObject["data"]).also {
+            logger.warn { "Error running '${process.commandLine}' in directory $workingDir: $it" }
         }
+
+        return parsePackageJson(data)
     }
 }

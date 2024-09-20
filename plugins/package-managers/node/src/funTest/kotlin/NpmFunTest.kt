@@ -40,7 +40,7 @@ import org.ossreviewtoolkit.utils.test.patchExpectedResult
 
 class NpmFunTest : WordSpec({
     "NPM" should {
-        "resolve shrinkwrap dependencies correctly" {
+        "resolve dependencies for a project with a 'shrinkwrap.json' correctly" {
             val definitionFile = getAssetFile("projects/synthetic/npm/shrinkwrap/package.json")
             val expectedResultFile = getAssetFile("projects/synthetic/npm-expected-output.yml")
 
@@ -121,7 +121,7 @@ class NpmFunTest : WordSpec({
         }
 
         "resolve Babel dependencies correctly" {
-            val definitionFile = getAssetFile("projects/synthetic/npm-babel/package.json")
+            val definitionFile = getAssetFile("projects/synthetic/npm/babel/package.json")
             val expectedResultFile = getAssetFile("projects/synthetic/npm-babel-expected-output.yml")
             val expectedResult = patchExpectedResult(expectedResultFile, definitionFile)
                 .fromYaml<ProjectAnalyzerResult>()
@@ -129,6 +129,18 @@ class NpmFunTest : WordSpec({
             val result = create("NPM").resolveSingleProject(definitionFile, resolveScopes = true)
 
             result.withInvariantIssues() shouldBe expectedResult.withInvariantIssues()
+        }
+
+        "resolve dependencies with URLs as versions correctly" {
+            val definitionFile = getAssetFile("projects/synthetic/npm/version-urls/package.json")
+            val expectedResultFile = getAssetFile("projects/synthetic/npm-version-urls-expected-output.yml")
+            val expectedResult = patchExpectedResult(expectedResultFile, definitionFile)
+                .fromYaml<ProjectAnalyzerResult>()
+
+            val result = create("NPM", allowDynamicVersions = true)
+                .resolveSingleProject(definitionFile, resolveScopes = true)
+
+            result.withInvariantIssues().toYaml() shouldBe expectedResult.withInvariantIssues().toYaml()
         }
     }
 })
